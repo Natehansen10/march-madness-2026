@@ -328,7 +328,17 @@ const POOL = {
     Linda: '#06b6d4', AJ: '#f43f5e'
   },
 
+  // First Four matchups — owner gets whoever WINS. Points/wins don't count.
+  // team1 vs team2 → winner is credited to owner from Round 1 onwards.
+  firstFour: [
+    { team1: 'Howard',          team2: 'UMBC',            owner: 'Curt' }, // Howard won ✅
+    { team1: 'Texas',           team2: 'NC State',         owner: 'Nate' }, // Texas won ✅
+    { team1: 'Lehigh',          team2: 'Prairie View A&M', owner: 'Nate' }, // Today 4:40 PM MDT
+    { team1: 'SMU',             team2: 'Miami (Ohio)',     owner: 'Jen'  }, // Today 7:15 PM MDT
+  ],
+
   // team → owner  (Juice = Josh)
+  // Both sides of every First Four matchup are mapped — the winner auto-resolves.
   owners: {
     'Duke':'Lyd','Siena':'Lyd','Villanova':'Lyd','High Point':'Lyd',
     'McNeese':'Lyd','Nebraska':'Lyd','Georgia':'Lyd','Alabama':'Lyd',
@@ -345,7 +355,9 @@ const POOL = {
     'South Florida':'AJ','North Dakota St.':'AJ','UConn':'AJ','Miami (FL)':'AJ',
     'VCU':'AJ','Saint Mary\'s':'AJ','Virginia':'AJ','Tennessee St.':'AJ',
     'UCLA':'Josh','Furman':'Josh','Kennesaw St.':'Josh','Purdue':'Josh',
-    'Illinois':'Josh','Texas A&M':'Josh','Akron':'Josh','Tennessee':'Josh'
+    'Illinois':'Josh','Texas A&M':'Josh','Akron':'Josh','Tennessee':'Josh',
+    // First Four alternates — both sides so winner is always mapped
+    'UMBC':'Curt','Texas':'Nate','Prairie View A&M':'Nate','Miami (Ohio)':'Jen'
   },
 
   // ESPN full name → short name
@@ -361,7 +373,8 @@ const POOL = {
     'LIU Sharks':'Long Island','Long Island University Sharks':'Long Island',
     'Villanova Wildcats':'Villanova','Utah State Aggies':'Utah St.',
     'Wisconsin Badgers':'Wisconsin','High Point Panthers':'High Point',
-    'Arkansas Razorbacks':'Arkansas','Hawaii Rainbow Warriors':'Hawaii',
+    'Arkansas Razorbacks':'Arkansas',
+    'Hawaii Rainbow Warriors':'Hawaii',"Hawai'i Rainbow Warriors":'Hawaii',
     'BYU Cougars':'BYU','NC State Wolfpack':'NC State','Gonzaga Bulldogs':'Gonzaga',
     'Kennesaw State Owls':'Kennesaw St.','Miami Hurricanes':'Miami (FL)',
     'Missouri Tigers':'Missouri','Purdue Boilermakers':'Purdue',
@@ -383,8 +396,8 @@ const POOL = {
     'Santa Clara Broncos':'Santa Clara','Iowa State Cyclones':'Iowa St.',
     'Tennessee State Tigers':'Tennessee St.',
     'Prairie View A&M Panthers':'Prairie View A&M',
-    'Miami (OH) RedHawks':'Miami (Ohio)','UMBC Retrievers':'UMBC',
-    'Texas Longhorns':'Texas'
+    'Miami (OH) RedHawks':'Miami (Ohio)','Miami Ohio RedHawks':'Miami (Ohio)',
+    'UMBC Retrievers':'UMBC','Texas Longhorns':'Texas'
   }
 };
 
@@ -438,6 +451,11 @@ function parseGames(events) {
     const awayShort = normalizeName(away.team.displayName);
     const homeShort = normalizeName(home.team.displayName);
 
+    const isFF = POOL.firstFour.some(ff =>
+      (ff.team1 === awayShort && ff.team2 === homeShort) ||
+      (ff.team2 === awayShort && ff.team1 === homeShort)
+    );
+
     return {
       id: ev.id,
       name: ev.name,
@@ -446,6 +464,7 @@ function parseGames(events) {
       status: statusDesc,
       state: statusState,   // pre / in / post
       clock, period,
+      isFirstFour: isFF,
       away: {
         espnName: away.team.displayName,
         name: awayShort,
@@ -496,6 +515,45 @@ async function fetchAllRecentGames() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// FIRST FOUR HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+// Returns true if this game is a First Four matchup
+function isFirstFourGame(game) {
+  return POOL.firstFour.some(ff =>
+    (ff.team1 === game.away.name && ff.team2 === game.home.name) ||
+    (ff.team2 === game.away.name && ff.team1 === game.home.name)
+  );
+}
+
+// Build a dynamic owners map that replaces First Four losers with winners.
+// After a First Four game finishes, the owner's "team" is the winner.
+function buildResolvedOwners(games) {
+  const resolved = Object.assign({}, POOL.owners);
+
+  POOL.firstFour.forEach(ff => {
+    // Find the completed First Four game for this matchup
+    const ffGame = games.find(g =>
+      g.state === 'post' &&
+      ((g.away.name === ff.team1 && g.home.name === ff.team2) ||
+       (g.away.name === ff.team2 && g.home.name === ff.team1))
+    );
+
+    if (ffGame) {
+      // Determine winner and loser
+      const winner = ffGame.away.winner ? ffGame.away.name : ffGame.home.name;
+      const loser  = ffGame.away.winner ? ffGame.home.name : ffGame.away.name;
+      // Assign owner to winner; remove loser so they're not credited
+      resolved[winner] = ff.owner;
+      delete resolved[loser];
+    }
+    // If game not yet played, both teams stay mapped — no change needed
+  });
+
+  return resolved;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // STANDINGS CALCULATION
 // ═══════════════════════════════════════════════════════════════════════
 function calcStandings(games) {
@@ -504,11 +562,18 @@ function calcStandings(games) {
     standings[p] = { pts: 0, wins: 0, losses: 0, gamesPlayed: 0, teams: {} };
   });
 
+  // Build owner map with First Four winners resolved
+  const resolvedOwners = buildResolvedOwners(games);
+
   games.forEach(game => {
     if (game.state !== 'post' && game.state !== 'in') return; // skip scheduled
 
+    // ✅ First Four games do NOT count toward points or wins
+    if (isFirstFourGame(game)) return;
+
     [game.away, game.home].forEach(side => {
-      const owner = side.owner;
+      // Use resolved owner (First Four winner replaces loser)
+      const owner = resolvedOwners[side.name];
       if (!owner || !standings[owner]) return;
       if (side.score === null) return;
 
@@ -632,7 +697,7 @@ function renderGames() {
     return `
     <div class="game-card">
       <div class="game-meta">
-        <span>${g.round}</span>
+        <span>${g.round}${g.isFirstFour ? ' <span style="color:var(--gold);font-size:0.65rem;font-weight:700;margin-left:4px">★ FIRST FOUR · No Points</span>' : ''}</span>
         <span class="game-status ${statusClass}">${g.status}${clockInfo}</span>
       </div>
       <div class="game-teams">
