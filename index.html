@@ -338,7 +338,9 @@ const POOL = {
   ],
 
   // team → owner  (Juice = Josh)
-  // Both sides of every First Four matchup are mapped — the winner auto-resolves.
+  // Only the bracket-assigned team is listed here (8 per person).
+  // First Four: only the originally-drafted team is mapped.
+  // buildResolvedOwners() swaps in the winner after the game is played.
   owners: {
     'Duke':'Lyd','Siena':'Lyd','Villanova':'Lyd','High Point':'Lyd',
     'McNeese':'Lyd','Nebraska':'Lyd','Georgia':'Lyd','Alabama':'Lyd',
@@ -355,9 +357,7 @@ const POOL = {
     'South Florida':'AJ','North Dakota St.':'AJ','UConn':'AJ','Miami (FL)':'AJ',
     'VCU':'AJ','Saint Mary\'s':'AJ','Virginia':'AJ','Tennessee St.':'AJ',
     'UCLA':'Josh','Furman':'Josh','Kennesaw St.':'Josh','Purdue':'Josh',
-    'Illinois':'Josh','Texas A&M':'Josh','Akron':'Josh','Tennessee':'Josh',
-    // First Four alternates — both sides so winner is always mapped
-    'UMBC':'Curt','Texas':'Nate','Prairie View A&M':'Nate','Miami (Ohio)':'Jen'
+    'Illinois':'Josh','Texas A&M':'Josh','Akron':'Josh','Tennessee':'Josh'
   },
 
   // ESPN full name → short name
@@ -526,13 +526,13 @@ function isFirstFourGame(game) {
   );
 }
 
-// Build a dynamic owners map that replaces First Four losers with winners.
-// After a First Four game finishes, the owner's "team" is the winner.
+// Build a dynamic owners map that resolves First Four winners.
+// Before game: only the originally-drafted team is mapped.
+// After game:  winner gets the owner, loser is removed.
 function buildResolvedOwners(games) {
   const resolved = Object.assign({}, POOL.owners);
 
   POOL.firstFour.forEach(ff => {
-    // Find the completed First Four game for this matchup
     const ffGame = games.find(g =>
       g.state === 'post' &&
       ((g.away.name === ff.team1 && g.home.name === ff.team2) ||
@@ -540,14 +540,17 @@ function buildResolvedOwners(games) {
     );
 
     if (ffGame) {
-      // Determine winner and loser
+      // Winner takes the owner slot, loser is removed
       const winner = ffGame.away.winner ? ffGame.away.name : ffGame.home.name;
       const loser  = ffGame.away.winner ? ffGame.home.name : ffGame.away.name;
-      // Assign owner to winner; remove loser so they're not credited
       resolved[winner] = ff.owner;
       delete resolved[loser];
+    } else {
+      // Game not yet played — make sure both teams are mapped to owner
+      // so the pre-game display shows the matchup correctly
+      resolved[ff.team1] = ff.owner;
+      resolved[ff.team2] = ff.owner;
     }
-    // If game not yet played, both teams stay mapped — no change needed
   });
 
   return resolved;
@@ -729,45 +732,87 @@ function renderTeams() {
   const container = document.getElementById('teamsContainer');
   const sorted = Object.entries(state.standings).sort((a,b) => b[1].pts - a[1].pts);
 
+  // Build resolved owners so First Four winners show correctly
+  const resolvedOwners = buildResolvedOwners(state.games);
+
   container.innerHTML = sorted.map(([person, s]) => {
     const color = POOL.colors[person];
     const wc = POOL.wildcards[person];
-    const personTeams = Object.keys(POOL.owners)
+
+    // Get this person's 8 drafted teams from base owners
+    const draftedTeams = Object.keys(POOL.owners)
       .filter(t => POOL.owners[t] === person)
       .sort();
 
-    // Find eliminated teams (have score + lost their last game)
+    // Apply First Four resolutions — swap in winner, swap out loser
+    const resolvedTeams = draftedTeams.map(team => {
+      // Check if this team was a First Four pick that has been resolved to a different winner
+      const ff = POOL.firstFour.find(f => f.owner === person && (f.team1 === team || f.team2 === team));
+      if (ff) {
+        // Find if game is done
+        const ffGame = state.games.find(g =>
+          g.state === 'post' &&
+          ((g.away.name === ff.team1 && g.home.name === ff.team2) ||
+           (g.away.name === ff.team2 && g.home.name === ff.team1))
+        );
+        if (ffGame) {
+          const winner = ffGame.away.winner ? ffGame.away.name : ffGame.home.name;
+          return winner; // replace original pick with actual winner
+        }
+        // Game not yet played — show as "Team1 vs Team2" placeholder
+        if (ff.team1 === team) return `${ff.team1} vs ${ff.team2}`; // show matchup
+      }
+      return team;
+    }).filter((t, i, arr) => arr.indexOf(t) === i); // dedupe
+
+    // Add wildcard as 9th row if not already in drafted list
+    const wcInDraft = draftedTeams.includes(wc);
+    const displayTeams = [...resolvedTeams];
+    if (!wcInDraft) displayTeams.push(wc + '__WC__');
+
+    // Find eliminated teams
     const eliminatedTeams = new Set();
-    state.games.filter(g => g.state === 'post').forEach(g => {
+    state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
       [g.away, g.home].forEach(side => {
-        if (!side.winner && side.owner === person) eliminatedTeams.add(side.name);
+        if (!side.winner && resolvedOwners[side.name] === person) eliminatedTeams.add(side.name);
       });
     });
-    // A team that won is NOT eliminated
-    state.games.filter(g => g.state === 'post').forEach(g => {
+    state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
       [g.away, g.home].forEach(side => {
-        if (side.winner && side.owner === person) eliminatedTeams.delete(side.name);
+        if (side.winner && resolvedOwners[side.name] === person) eliminatedTeams.delete(side.name);
       });
     });
 
-    const rows = personTeams.map(team => {
+    const rows = displayTeams.map(teamRaw => {
+      const isWCRow = teamRaw.endsWith('__WC__');
+      const team = isWCRow ? teamRaw.replace('__WC__','') : teamRaw;
+      const isMatchup = team.includes(' vs ');
       const teamPts = s.teams[team] || 0;
-      const isWC = wc === team;
+      const isWCInDraft = !isWCRow && wc === team; // WC badge on drafted team that matches wildcard
       const isElim = eliminatedTeams.has(team);
-      return `<tr>
-        <td>${team}${isWC ? '<span class="wc-tag">WC</span>' : ''}${isElim ? '<span class="elim-tag">OUT</span>' : ''}</td>
-        <td style="color:var(--muted)">${getTeamSeed(team)}</td>
-        <td style="color:var(--muted)">${getTeamRegion(team)}</td>
-        <td style="font-family:'DM Mono',monospace;color:var(--accent)">${teamPts > 0 ? teamPts.toLocaleString() : '—'}</td>
+      const seedVal = isMatchup ? '—' : getTeamSeed(team);
+      const regionVal = isMatchup ? '—' : getTeamRegion(team);
+      const ptsVal = isMatchup ? '<span style="color:var(--muted);font-size:0.75rem">Pending</span>'
+                   : teamPts > 0 ? teamPts.toLocaleString() : '—';
+      const wcBadge = (isWCRow || isWCInDraft) ? '<span class="wc-tag">WC</span>' : '';
+      const elimBadge = isElim ? '<span class="elim-tag">OUT</span>' : '';
+      const rowStyle = isWCRow ? 'background:rgba(251,191,36,0.04);' : '';
+      return `<tr style="${rowStyle}">
+        <td>${team}${wcBadge}${elimBadge}</td>
+        <td style="color:var(--muted)">${seedVal}</td>
+        <td style="color:var(--muted)">${regionVal}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--accent)">${ptsVal}</td>
       </tr>`;
     }).join('');
+
+    const totalShown = wcInDraft ? draftedTeams.length : draftedTeams.length + 1;
 
     return `
     <div class="person-section">
       <div class="person-header">
         <div class="person-dot" style="background:${color}"></div>
         <h3>${person}</h3>
-        <span style="color:var(--muted);font-size:0.82rem">${personTeams.length} teams · WC: ${wc}</span>
+        <span style="color:var(--muted);font-size:0.82rem">${totalShown} teams · WC: ${wc}${wcInDraft ? ' (drafted)' : ''}</span>
         <div class="pts-badge">${s.pts.toLocaleString()} pts</div>
       </div>
       <table class="teams-table">
