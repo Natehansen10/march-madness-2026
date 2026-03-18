@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>March Madness 2026 — Family Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0c10;
+    --surface:   #111318;
+    --surface2:  #181c24;
+    --border:    rgba(255,255,255,0.07);
+    --accent:    #f97316;
+    --accent2:   #3b82f6;
+    --gold:      #fbbf24;
+    --silver:    #94a3b8;
+    --bronze:    #b45309;
+    --green:     #22c55e;
+    --red:       #ef4444;
+    --text:      #f1f5f9;
+    --muted:     #64748b;
+    --radius:    12px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── animated court lines background ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 80px, rgba(255,255,255,0.015) 80px, rgba(255,255,255,0.015) 81px),
+      repeating-linear-gradient(90deg, transparent, transparent 80px, rgba(255,255,255,0.015) 80px, rgba(255,255,255,0.015) 81px);
+    pointer-events: none;
+  }
+
+  .glow-orb {
+    position: fixed; border-radius: 50%; filter: blur(120px); z-index: 0; pointer-events: none;
+  }
+  .glow-orb-1 { width: 600px; height: 600px; background: rgba(249,115,22,0.08); top: -200px; left: -100px; }
+  .glow-orb-2 { width: 500px; height: 500px; background: rgba(59,130,246,0.07); bottom: -150px; right: -100px; }
+
+  .container { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* ── HEADER ── */
+  header {
+    padding: 36px 0 28px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap;
+  }
+  .header-left h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    letter-spacing: 2px;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--gold) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header-left p { color: var(--muted); font-size: 0.9rem; margin-top: 4px; font-weight: 300; }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3);
+    color: var(--green); padding: 5px 12px; border-radius: 99px; font-size: 0.75rem;
+    font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+    font-family: 'DM Mono', monospace;
+  }
+  .live-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.7); } }
+
+  .refresh-info { color: var(--muted); font-size: 0.78rem; font-family: 'DM Mono', monospace; }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 28px; background: var(--surface); border-radius: var(--radius); padding: 4px; width: fit-content; }
+  .tab {
+    padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.88rem; font-weight: 500;
+    color: var(--muted); background: transparent; transition: all 0.2s;
+  }
+  .tab.active { background: var(--accent); color: white; }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── STAT CARDS ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .stat-card:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.12); }
+  .stat-card .label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 8px; }
+  .stat-card .value { font-family: 'Bebas Neue', sans-serif; font-size: 2.2rem; line-height: 1; color: var(--text); }
+  .stat-card .sub { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+
+  /* ── LEADERBOARD ── */
+  .leaderboard { display: flex; flex-direction: column; gap: 10px; }
+
+  .lb-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 22px;
+    display: grid; grid-template-columns: 44px 1fr auto auto auto auto;
+    align-items: center; gap: 16px;
+    transition: transform 0.2s, border-color 0.2s;
+    cursor: default;
+    position: relative; overflow: hidden;
+  }
+  .lb-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--person-color, var(--accent));
+  }
+  .lb-card:hover { transform: translateX(4px); border-color: rgba(255,255,255,0.12); }
+  .lb-card.rank-1 { background: linear-gradient(135deg, rgba(251,191,36,0.08) 0%, var(--surface) 60%); border-color: rgba(251,191,36,0.25); }
+  .lb-card.rank-2 { background: linear-gradient(135deg, rgba(148,163,184,0.06) 0%, var(--surface) 60%); border-color: rgba(148,163,184,0.2); }
+  .lb-card.rank-3 { background: linear-gradient(135deg, rgba(180,83,9,0.07) 0%, var(--surface) 60%); }
+
+  .rank-badge {
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; text-align: center; line-height: 1;
+  }
+  .rank-1 .rank-badge { color: var(--gold); }
+  .rank-2 .rank-badge { color: var(--silver); }
+  .rank-3 .rank-badge { color: var(--bronze); }
+
+  .lb-name { font-size: 1.05rem; font-weight: 600; }
+  .lb-wc { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+  .lb-stat { text-align: center; min-width: 60px; }
+  .lb-stat .s-val { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; line-height: 1; }
+  .lb-stat .s-lbl { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .win-pct-bar {
+    width: 80px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
+  }
+  .win-pct-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width 1s ease; }
+
+  /* ── GAMES PANEL ── */
+  .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+
+  .game-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; transition: border-color 0.2s;
+  }
+  .game-card:hover { border-color: rgba(255,255,255,0.12); }
+  .game-meta { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; display: flex; justify-content: space-between; }
+  .game-status { font-size: 0.7rem; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .game-status.final    { background: rgba(100,116,139,0.2); color: var(--silver); }
+  .game-status.live     { background: rgba(34,197,94,0.15); color: var(--green); animation: pulse 1.5s infinite; }
+  .game-status.upcoming { background: rgba(59,130,246,0.15); color: var(--accent2); }
+
+  .game-teams { display: flex; flex-direction: column; gap: 8px; }
+  .game-team {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border-radius: 8px; background: var(--surface2);
+  }
+  .game-team.winner { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); }
+  .game-team.loser  { opacity: 0.6; }
+  .team-info { display: flex; align-items: center; gap: 8px; }
+  .team-seed { font-size: 0.68rem; color: var(--muted); font-family: 'DM Mono', monospace; width: 18px; }
+  .team-name { font-size: 0.88rem; font-weight: 500; }
+  .team-owner-chip {
+    font-size: 0.62rem; padding: 1px 6px; border-radius: 99px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    background: var(--person-color, rgba(255,255,255,0.1)); color: white;
+    opacity: 0.85;
+  }
+  .team-score { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; line-height: 1; }
+
+  /* ── TEAMS PANEL ── */
+  .person-section { margin-bottom: 28px; }
+  .person-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
+  }
+  .person-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .person-header h3 { font-size: 1.05rem; font-weight: 600; }
+  .person-header .pts-badge {
+    margin-left: auto; font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem;
+    background: var(--surface2); padding: 3px 12px; border-radius: 99px;
+    color: var(--accent);
+  }
+
+  .teams-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .teams-table th { text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 500; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .teams-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  .teams-table tr:last-child td { border-bottom: none; }
+  .teams-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .wc-tag { font-size: 0.6rem; background: rgba(251,191,36,0.2); color: var(--gold); padding: 1px 5px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
+  .elim-tag { font-size: 0.6rem; background: rgba(239,68,68,0.15); color: var(--red); padding: 1px 5px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
+
+  /* ── ROUND FILTER ── */
+  .round-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+  .round-btn {
+    padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-size: 0.78rem;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s;
+  }
+  .round-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .round-btn:hover:not(.active) { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+  /* ── LOADING & EMPTY ── */
+  .loading { text-align: center; padding: 60px; color: var(--muted); }
+  .loading .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 0.9rem; }
+
+  /* ── FOOTER ── */
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.75rem; border-top: 1px solid var(--border); margin-top: 40px; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    .lb-card { grid-template-columns: 36px 1fr auto auto; }
+    .lb-stat.hide-mobile, .win-pct-bar { display: none; }
+    .games-grid { grid-template-columns: 1fr; }
+  }
+
+  .points-change {
+    display: inline-block; font-size: 0.7rem; color: var(--green);
+    animation: popIn 0.5s ease; margin-left: 4px;
+  }
+  @keyframes popIn { from { transform: scale(0) translateY(-4px); opacity:0; } to { transform: scale(1) translateY(0); opacity:1; } }
+
+  .error-banner {
+    background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+    color: #fca5a5; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;
+    font-size: 0.85rem; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="glow-orb glow-orb-1"></div>
+<div class="glow-orb glow-orb-2"></div>
+
+<div class="container">
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <h1>March Madness 2026</h1>
+      <p>Family Draft Pool · 8 Players · Live Scoring</p>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+      <div class="live-badge"><span class="dot"></span> Live Updates</div>
+      <div class="refresh-info" id="lastUpdated">Fetching scores…</div>
+    </div>
+  </header>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- STAT OVERVIEW -->
+  <div class="stat-grid" id="statGrid">
+    <div class="stat-card"><div class="label">Games Today</div><div class="value" id="statGamesToday">—</div><div class="sub">NCAA Tournament</div></div>
+    <div class="stat-card"><div class="label">Games Live</div><div class="value" id="statLive" style="color:var(--green)">—</div><div class="sub">In progress</div></div>
+    <div class="stat-card"><div class="label">Leader</div><div class="value" id="statLeader" style="font-size:1.6rem">—</div><div class="sub" id="statLeaderPts">— pts</div></div>
+    <div class="stat-card"><div class="label">Total Pts Scored</div><div class="value" id="statTotalPts">—</div><div class="sub">Across all teams</div></div>
+    <div class="stat-card"><div class="label">Completed Games</div><div class="value" id="statCompleted">—</div><div class="sub">This tournament</div></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('leaderboard')">🏆 Leaderboard</button>
+    <button class="tab" onclick="showTab('games')">🏀 Games</button>
+    <button class="tab" onclick="showTab('teams')">📋 My Teams</button>
+  </div>
+
+  <!-- LEADERBOARD TAB -->
+  <div class="tab-panel active" id="tab-leaderboard">
+    <div class="leaderboard" id="leaderboardContainer">
+      <div class="loading"><div class="spinner"></div>Loading standings…</div>
+    </div>
+  </div>
+
+  <!-- GAMES TAB -->
+  <div class="tab-panel" id="tab-games">
+    <div class="round-filters" id="roundFilters"></div>
+    <div class="games-grid" id="gamesContainer">
+      <div class="loading"><div class="spinner"></div>Loading games…</div>
+    </div>
+  </div>
+
+  <!-- TEAMS TAB -->
+  <div class="tab-panel" id="tab-teams">
+    <div id="teamsContainer">
+      <div class="loading"><div class="spinner"></div>Loading teams…</div>
+    </div>
+  </div>
+
+  <footer>
+    Data via ESPN API · Auto-refreshes every 60 seconds · Made with ❤️ for the family pool
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// POOL CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════
+const POOL = {
+  wildcards: {
+    Nate: 'Arizona', Lyd: 'Houston', Jen: 'Arizona',
+    Curt: 'Arizona', Josh: 'Arizona', Katie: 'Arizona',
+    Linda: 'Houston', AJ: 'Duke'
+  },
+
+  // Color per person (CSS hex)
+  colors: {
+    Nate: '#3b82f6', Lyd: '#22c55e', Jen: '#f97316',
+    Curt: '#a855f7', Josh: '#eab308', Katie: '#ec4899',
+    Linda: '#06b6d4', AJ: '#f43f5e'
+  },
+
+  // team → owner  (Juice = Josh)
+  owners: {
+    'Duke':'Lyd','Siena':'Lyd','Villanova':'Lyd','High Point':'Lyd',
+    'McNeese':'Lyd','Nebraska':'Lyd','Georgia':'Lyd','Alabama':'Lyd',
+    'Ohio St.':'Jen','St. John\'s':'Jen','Utah St.':'Jen','Idaho':'Jen',
+    'Michigan':'Jen','Texas Tech':'Jen','Hofstra':'Jen','SMU':'Jen',
+    'TCU':'Curt','Kansas':'Curt','Arizona':'Curt','Hawaii':'Curt',
+    'Queens (N.C.)':'Curt','Iowa':'Curt','Vanderbilt':'Curt','Howard':'Curt',
+    'Wisconsin':'Nate','Arkansas':'Nate','NC State':'Nate','Lehigh':'Nate',
+    'Clemson':'Nate','Troy':'Nate','Houston':'Nate','Santa Clara':'Nate',
+    'Cal Baptist':'Katie','Louisville':'Katie','UCF':'Katie','Gonzaga':'Katie',
+    'Missouri':'Katie','North Carolina':'Katie','Wright St.':'Katie','Iowa St.':'Katie',
+    'Northern Iowa':'Linda','Michigan St.':'Linda','Long Island':'Linda','BYU':'Linda',
+    'Florida':'Linda','Penn':'Linda','Saint Louis':'Linda','Kentucky':'Linda',
+    'South Florida':'AJ','North Dakota St.':'AJ','UConn':'AJ','Miami (FL)':'AJ',
+    'VCU':'AJ','Saint Mary\'s':'AJ','Virginia':'AJ','Tennessee St.':'AJ',
+    'UCLA':'Josh','Furman':'Josh','Kennesaw St.':'Josh','Purdue':'Josh',
+    'Illinois':'Josh','Texas A&M':'Josh','Akron':'Josh','Tennessee':'Josh'
+  },
+
+  // ESPN full name → short name
+  nameMap: {
+    'Duke Blue Devils':'Duke','Siena Saints':'Siena',
+    'Ohio State Buckeyes':'Ohio St.','TCU Horned Frogs':'TCU',
+    'St. John\'s Red Storm':'St. John\'s','Northern Iowa Panthers':'Northern Iowa',
+    'Kansas Jayhawks':'Kansas','California Baptist Lancers':'Cal Baptist',
+    'Louisville Cardinals':'Louisville','South Florida Bulls':'South Florida',
+    'Michigan State Spartans':'Michigan St.','North Dakota State Bison':'North Dakota St.',
+    'UCLA Bruins':'UCLA','UCF Knights':'UCF','UConn Huskies':'UConn',
+    'Furman Paladins':'Furman','Arizona Wildcats':'Arizona',
+    'LIU Sharks':'Long Island','Long Island University Sharks':'Long Island',
+    'Villanova Wildcats':'Villanova','Utah State Aggies':'Utah St.',
+    'Wisconsin Badgers':'Wisconsin','High Point Panthers':'High Point',
+    'Arkansas Razorbacks':'Arkansas','Hawaii Rainbow Warriors':'Hawaii',
+    'BYU Cougars':'BYU','NC State Wolfpack':'NC State','Gonzaga Bulldogs':'Gonzaga',
+    'Kennesaw State Owls':'Kennesaw St.','Miami Hurricanes':'Miami (FL)',
+    'Missouri Tigers':'Missouri','Purdue Boilermakers':'Purdue',
+    'Queens Royals':'Queens (N.C.)','Florida Gators':'Florida',
+    'Lehigh Mountain Hawks':'Lehigh','Clemson Tigers':'Clemson',
+    'Iowa Hawkeyes':'Iowa','Vanderbilt Commodores':'Vanderbilt',
+    'McNeese Cowboys':'McNeese','Nebraska Cornhuskers':'Nebraska',
+    'Troy Trojans':'Troy','North Carolina Tar Heels':'North Carolina',
+    'VCU Rams':'VCU','Illinois Fighting Illini':'Illinois',
+    'Penn Quakers':'Penn','Saint Mary\'s Gaels':'Saint Mary\'s',
+    'Texas A&M Aggies':'Texas A&M','Houston Cougars':'Houston',
+    'Idaho Vandals':'Idaho','Michigan Wolverines':'Michigan',
+    'Howard Bison':'Howard','Georgia Bulldogs':'Georgia',
+    'Saint Louis Billikens':'Saint Louis','Texas Tech Red Raiders':'Texas Tech',
+    'Akron Zips':'Akron','Alabama Crimson Tide':'Alabama',
+    'Hofstra Pride':'Hofstra','Tennessee Volunteers':'Tennessee',
+    'SMU Mustangs':'SMU','Virginia Cavaliers':'Virginia',
+    'Wright State Raiders':'Wright St.','Kentucky Wildcats':'Kentucky',
+    'Santa Clara Broncos':'Santa Clara','Iowa State Cyclones':'Iowa St.',
+    'Tennessee State Tigers':'Tennessee St.',
+    'Prairie View A&M Panthers':'Prairie View A&M',
+    'Miami (OH) RedHawks':'Miami (Ohio)','UMBC Retrievers':'UMBC',
+    'Texas Longhorns':'Texas'
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+let state = {
+  games: [],           // all fetched game objects
+  standings: {},       // person → { pts, wins, losses, teams:{team→pts} }
+  activeRound: 'All',
+  refreshInterval: null,
+  prevStandings: {}
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ESPN API
+// ═══════════════════════════════════════════════════════════════════════
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard';
+
+function normalizeName(espnName) {
+  if (POOL.nameMap[espnName]) return POOL.nameMap[espnName];
+  // Fuzzy: strip last word (usually nickname)
+  const parts = espnName.split(' ');
+  if (parts.length > 2) return parts.slice(0, -1).join(' ');
+  return espnName;
+}
+
+async function fetchGamesForDate(dateStr) {
+  const url = `${ESPN_BASE}?groups=100&dates=${dateStr}&limit=50`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`ESPN API ${resp.status}`);
+  const data = await resp.json();
+  return parseGames(data.events || []);
+}
+
+function parseGames(events) {
+  return events.map(ev => {
+    const comp = ev.competitions[0];
+    const teams = comp.competitors;
+    const away = teams[0], home = teams[1];
+    const statusDesc = ev.status.type.description;        // Final / In Progress / Scheduled
+    const statusState = ev.status.type.state;             // pre / in / post
+    const clock = ev.status.displayClock || '';
+    const period = ev.status.period || 0;
+
+    // Round name from notes or season type
+    let roundName = 'NCAA Tournament';
+    const notes = comp.notes || [];
+    if (notes.length) roundName = notes[0].headline || roundName;
+
+    const awayShort = normalizeName(away.team.displayName);
+    const homeShort = normalizeName(home.team.displayName);
+
+    return {
+      id: ev.id,
+      name: ev.name,
+      date: ev.date,
+      round: roundName,
+      status: statusDesc,
+      state: statusState,   // pre / in / post
+      clock, period,
+      away: {
+        espnName: away.team.displayName,
+        name: awayShort,
+        score: away.score ? parseInt(away.score) : null,
+        winner: away.winner || false,
+        seed: away.curatedRank?.current || away.team.seed || null,
+        owner: POOL.owners[awayShort] || null
+      },
+      home: {
+        espnName: home.team.displayName,
+        name: homeShort,
+        score: home.score ? parseInt(home.score) : null,
+        winner: home.winner || false,
+        seed: home.curatedRank?.current || home.team.seed || null,
+        owner: POOL.owners[homeShort] || null
+      }
+    };
+  });
+}
+
+// Fetch a window of tournament dates (today ± 2 days + key round dates)
+async function fetchAllRecentGames() {
+  const today = new Date();
+  const dates = new Set();
+
+  // Always include today and yesterday
+  for (let d = -1; d <= 1; d++) {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() + d);
+    dates.add(dt.toISOString().slice(0,10).replace(/-/g,''));
+  }
+
+  // Key 2026 tournament dates
+  ['20260317','20260318','20260319','20260320','20260321','20260322',
+   '20260326','20260327','20260328','20260329','20260404','20260406'].forEach(d => dates.add(d));
+
+  const allGames = [];
+  await Promise.allSettled([...dates].map(async d => {
+    try {
+      const games = await fetchGamesForDate(d);
+      allGames.push(...games);
+    } catch(e) { /* skip failed dates silently */ }
+  }));
+
+  // Deduplicate by id
+  const seen = new Set();
+  return allGames.filter(g => seen.has(g.id) ? false : seen.add(g.id));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STANDINGS CALCULATION
+// ═══════════════════════════════════════════════════════════════════════
+function calcStandings(games) {
+  const standings = {};
+  Object.keys(POOL.colors).forEach(p => {
+    standings[p] = { pts: 0, wins: 0, losses: 0, gamesPlayed: 0, teams: {} };
+  });
+
+  games.forEach(game => {
+    if (game.state !== 'post' && game.state !== 'in') return; // skip scheduled
+
+    [game.away, game.home].forEach(side => {
+      const owner = side.owner;
+      if (!owner || !standings[owner]) return;
+      if (side.score === null) return;
+
+      const s = standings[owner];
+      s.pts += side.score;
+      if (!s.teams[side.name]) s.teams[side.name] = 0;
+      s.teams[side.name] += side.score;
+
+      // Count wins/losses only for completed games
+      if (game.state === 'post') {
+        s.gamesPlayed++;
+        if (side.winner) s.wins++; else s.losses++;
+      }
+    });
+  });
+
+  return standings;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER LEADERBOARD
+// ═══════════════════════════════════════════════════════════════════════
+function renderLeaderboard() {
+  const sorted = Object.entries(state.standings)
+    .sort((a, b) => b[1].pts - a[1].pts);
+
+  const container = document.getElementById('leaderboardContainer');
+
+  if (sorted.every(([,s]) => s.pts === 0)) {
+    container.innerHTML = `<div class="empty">⏳ No scores yet — check back when games start on March 17!</div>`;
+    updateStatCards(sorted);
+    return;
+  }
+
+  container.innerHTML = sorted.map(([person, s], i) => {
+    const rank = i + 1;
+    const rankClass = rank <= 3 ? `rank-${rank}` : '';
+    const rankDisplay = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    const color = POOL.colors[person];
+    const wc = POOL.wildcards[person];
+    const total = s.wins + s.losses;
+    const pct = total > 0 ? Math.round((s.wins / total) * 100) : 0;
+
+    const prevPts = state.prevStandings[person]?.pts || 0;
+    const delta = s.pts - prevPts;
+    const deltaHtml = delta > 0
+      ? `<span class="points-change">+${delta}</span>` : '';
+
+    return `
+    <div class="lb-card ${rankClass}" style="--person-color:${color}">
+      <div class="rank-badge">${rankDisplay}</div>
+      <div>
+        <div class="lb-name">${person} ${deltaHtml}</div>
+        <div class="lb-wc">⭐ Wildcard: ${wc}</div>
+      </div>
+      <div class="lb-stat">
+        <div class="s-val" style="color:var(--accent)">${s.pts.toLocaleString()}</div>
+        <div class="s-lbl">Points</div>
+      </div>
+      <div class="lb-stat hide-mobile">
+        <div class="s-val" style="color:var(--green)">${s.wins}</div>
+        <div class="s-lbl">Wins</div>
+      </div>
+      <div class="lb-stat hide-mobile">
+        <div class="s-val" style="color:var(--red)">${s.losses}</div>
+        <div class="s-lbl">Losses</div>
+      </div>
+      <div style="text-align:center;min-width:70px">
+        <div class="s-val" style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--silver)">${pct}%</div>
+        <div class="win-pct-bar"><div class="win-pct-fill" style="width:${pct}%"></div></div>
+        <div class="s-lbl" style="font-size:0.62rem;color:var(--muted);margin-top:2px">Win %</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateStatCards(sorted);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER GAMES
+// ═══════════════════════════════════════════════════════════════════════
+function renderGames() {
+  const rounds = ['All', ...new Set(state.games.map(g => g.round))];
+
+  // Round filter buttons
+  const filterEl = document.getElementById('roundFilters');
+  filterEl.innerHTML = rounds.map(r =>
+    `<button class="round-btn ${r === state.activeRound ? 'active' : ''}"
+      onclick="setRound('${r}')">${r}</button>`
+  ).join('');
+
+  const filtered = state.activeRound === 'All'
+    ? state.games
+    : state.games.filter(g => g.round === state.activeRound);
+
+  // Sort: live first, then final, then upcoming
+  const sorted = [...filtered].sort((a, b) => {
+    const order = {in: 0, post: 1, pre: 2};
+    return (order[a.state] ?? 3) - (order[b.state] ?? 3);
+  });
+
+  const container = document.getElementById('gamesContainer');
+  if (!sorted.length) {
+    container.innerHTML = '<div class="empty">No games found for this round yet.</div>';
+    return;
+  }
+
+  container.innerHTML = sorted.map(g => {
+    const away = g.away, home = g.home;
+    const isPost = g.state === 'post';
+    const isLive = g.state === 'in';
+    const awayClass = isPost ? (away.winner ? 'winner' : 'loser') : '';
+    const homeClass = isPost ? (home.winner ? 'winner' : 'loser') : '';
+    const statusClass = isLive ? 'live' : isPost ? 'final' : 'upcoming';
+    const awayColor = away.owner ? POOL.colors[away.owner] : '#64748b';
+    const homeColor = home.owner ? POOL.colors[home.owner] : '#64748b';
+    const awayScore = away.score !== null ? away.score : (isLive ? '0' : '—');
+    const homeScore = home.score !== null ? home.score : (isLive ? '0' : '—');
+    const clockInfo = isLive && g.clock ? ` · ${g.period > 2 ? 'OT' : `H${g.period}`} ${g.clock}` : '';
+
+    return `
+    <div class="game-card">
+      <div class="game-meta">
+        <span>${g.round}</span>
+        <span class="game-status ${statusClass}">${g.status}${clockInfo}</span>
+      </div>
+      <div class="game-teams">
+        <div class="game-team ${awayClass}">
+          <div class="team-info">
+            <span class="team-seed">${away.seed || ''}</span>
+            <span class="team-name">${away.name}</span>
+            ${away.owner ? `<span class="team-owner-chip" style="background:${awayColor}">${away.owner}</span>` : ''}
+          </div>
+          <span class="team-score">${awayScore}</span>
+        </div>
+        <div class="game-team ${homeClass}">
+          <div class="team-info">
+            <span class="team-seed">${home.seed || ''}</span>
+            <span class="team-name">${home.name}</span>
+            ${home.owner ? `<span class="team-owner-chip" style="background:${homeColor}">${home.owner}</span>` : ''}
+          </div>
+          <span class="team-score">${homeScore}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RENDER TEAMS
+// ═══════════════════════════════════════════════════════════════════════
+function renderTeams() {
+  const container = document.getElementById('teamsContainer');
+  const sorted = Object.entries(state.standings).sort((a,b) => b[1].pts - a[1].pts);
+
+  container.innerHTML = sorted.map(([person, s]) => {
+    const color = POOL.colors[person];
+    const wc = POOL.wildcards[person];
+    const personTeams = Object.keys(POOL.owners)
+      .filter(t => POOL.owners[t] === person)
+      .sort();
+
+    // Find eliminated teams (have score + lost their last game)
+    const eliminatedTeams = new Set();
+    state.games.filter(g => g.state === 'post').forEach(g => {
+      [g.away, g.home].forEach(side => {
+        if (!side.winner && side.owner === person) eliminatedTeams.add(side.name);
+      });
+    });
+    // A team that won is NOT eliminated
+    state.games.filter(g => g.state === 'post').forEach(g => {
+      [g.away, g.home].forEach(side => {
+        if (side.winner && side.owner === person) eliminatedTeams.delete(side.name);
+      });
+    });
+
+    const rows = personTeams.map(team => {
+      const teamPts = s.teams[team] || 0;
+      const isWC = wc === team;
+      const isElim = eliminatedTeams.has(team);
+      return `<tr>
+        <td>${team}${isWC ? '<span class="wc-tag">WC</span>' : ''}${isElim ? '<span class="elim-tag">OUT</span>' : ''}</td>
+        <td style="color:var(--muted)">${getTeamSeed(team)}</td>
+        <td style="color:var(--muted)">${getTeamRegion(team)}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--accent)">${teamPts > 0 ? teamPts.toLocaleString() : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+    <div class="person-section">
+      <div class="person-header">
+        <div class="person-dot" style="background:${color}"></div>
+        <h3>${person}</h3>
+        <span style="color:var(--muted);font-size:0.82rem">${personTeams.length} teams · WC: ${wc}</span>
+        <div class="pts-badge">${s.pts.toLocaleString()} pts</div>
+      </div>
+      <table class="teams-table">
+        <thead><tr><th>Team</th><th>Seed</th><th>Region</th><th>Points Scored</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STAT CARDS
+// ═══════════════════════════════════════════════════════════════════════
+function updateStatCards(sorted) {
+  const liveGames = state.games.filter(g => g.state === 'in').length;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayGames = state.games.filter(g => g.date.startsWith(todayStr)).length;
+  const completed = state.games.filter(g => g.state === 'post').length;
+  const totalPts = Object.values(state.standings).reduce((a,s) => a + s.pts, 0);
+  const leader = sorted[0];
+
+  document.getElementById('statGamesToday').textContent = todayGames;
+  document.getElementById('statLive').textContent = liveGames;
+  document.getElementById('statLeader').textContent = leader ? leader[0] : '—';
+  document.getElementById('statLeaderPts').textContent = leader ? `${leader[1].pts.toLocaleString()} pts` : '—';
+  document.getElementById('statTotalPts').textContent = totalPts.toLocaleString();
+  document.getElementById('statCompleted').textContent = completed;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+const TEAM_META = {
+  'Duke':{seed:1,region:'East'},'Siena':{seed:16,region:'East'},'Ohio St.':{seed:8,region:'East'},
+  'TCU':{seed:9,region:'East'},'St. John\'s':{seed:5,region:'East'},'Northern Iowa':{seed:12,region:'East'},
+  'Kansas':{seed:4,region:'East'},'Cal Baptist':{seed:13,region:'East'},'Louisville':{seed:6,region:'East'},
+  'South Florida':{seed:11,region:'East'},'Michigan St.':{seed:3,region:'East'},'North Dakota St.':{seed:14,region:'East'},
+  'UCLA':{seed:7,region:'East'},'UCF':{seed:10,region:'East'},'UConn':{seed:2,region:'East'},'Furman':{seed:15,region:'East'},
+  'Arizona':{seed:1,region:'West'},'Long Island':{seed:16,region:'West'},'Villanova':{seed:8,region:'West'},
+  'Utah St.':{seed:9,region:'West'},'Wisconsin':{seed:5,region:'West'},'High Point':{seed:12,region:'West'},
+  'Arkansas':{seed:4,region:'West'},'Hawaii':{seed:13,region:'West'},'BYU':{seed:6,region:'West'},
+  'NC State':{seed:11,region:'West'},'Gonzaga':{seed:3,region:'West'},'Kennesaw St.':{seed:14,region:'West'},
+  'Miami (FL)':{seed:7,region:'West'},'Missouri':{seed:10,region:'West'},'Purdue':{seed:2,region:'West'},'Queens (N.C.)':{seed:15,region:'West'},
+  'Florida':{seed:1,region:'South'},'Lehigh':{seed:16,region:'South'},'Clemson':{seed:8,region:'South'},
+  'Iowa':{seed:9,region:'South'},'Vanderbilt':{seed:5,region:'South'},'McNeese':{seed:12,region:'South'},
+  'Nebraska':{seed:4,region:'South'},'Troy':{seed:13,region:'South'},'North Carolina':{seed:6,region:'South'},
+  'VCU':{seed:11,region:'South'},'Illinois':{seed:3,region:'South'},'Penn':{seed:14,region:'South'},
+  'Saint Mary\'s':{seed:7,region:'South'},'Texas A&M':{seed:10,region:'South'},'Houston':{seed:2,region:'South'},'Idaho':{seed:15,region:'South'},
+  'Michigan':{seed:1,region:'Midwest'},'Howard':{seed:16,region:'Midwest'},'Georgia':{seed:8,region:'Midwest'},
+  'Saint Louis':{seed:9,region:'Midwest'},'Texas Tech':{seed:5,region:'Midwest'},'Akron':{seed:12,region:'Midwest'},
+  'Alabama':{seed:4,region:'Midwest'},'Hofstra':{seed:13,region:'Midwest'},'Tennessee':{seed:6,region:'Midwest'},
+  'SMU':{seed:11,region:'Midwest'},'Virginia':{seed:3,region:'Midwest'},'Wright St.':{seed:14,region:'Midwest'},
+  'Kentucky':{seed:7,region:'Midwest'},'Santa Clara':{seed:10,region:'Midwest'},'Iowa St.':{seed:2,region:'Midwest'},'Tennessee St.':{seed:15,region:'Midwest'}
+};
+function getTeamSeed(t) { return TEAM_META[t]?.seed || '—'; }
+function getTeamRegion(t) { return TEAM_META[t]?.region || '—'; }
+
+function setRound(round) {
+  state.activeRound = round;
+  renderGames();
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = `⚠ ${msg}`;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 8000);
+}
+
+function setLastUpdated() {
+  const now = new Date();
+  document.getElementById('lastUpdated').textContent =
+    `Updated ${now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAIN REFRESH LOOP
+// ═══════════════════════════════════════════════════════════════════════
+async function refresh() {
+  try {
+    const games = await fetchAllRecentGames();
+    state.prevStandings = JSON.parse(JSON.stringify(state.standings));
+    state.games = games;
+    state.standings = calcStandings(games);
+
+    renderLeaderboard();
+    renderGames();
+    renderTeams();
+    setLastUpdated();
+  } catch(err) {
+    console.error(err);
+    showError(`Could not reach ESPN API. Will retry in 60s. (${err.message})`);
+  }
+}
+
+// Refresh every 60 seconds; faster (20s) when games are live
+function scheduleRefresh() {
+  if (state.refreshInterval) clearInterval(state.refreshInterval);
+  const hasLive = state.games.some(g => g.state === 'in');
+  const interval = hasLive ? 20000 : 60000;
+  state.refreshInterval = setInterval(() => {
+    refresh().then(scheduleRefresh);
+  }, interval);
+}
+
+// Boot
+refresh().then(scheduleRefresh);
+</script>
+</body>
+</html>
