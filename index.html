@@ -659,18 +659,39 @@ function renderLeaderboard() {
 // RENDER GAMES
 // ═══════════════════════════════════════════════════════════════════════
 function renderGames() {
-  const rounds = ['All', ...new Set(state.games.map(g => g.round))];
+  // Only show games involving pool teams — filter out non-pool matchups
+  const poolGames = state.games.filter(g =>
+    g.away.owner || g.home.owner
+  );
 
-  // Round filter buttons
+  // Simple round filter: just First Four / First Round / etc — clean labels only
+  const roundOrder = ['First Four','First Round','Second Round','Sweet 16','Elite Eight','Final Four','Championship'];
+  const presentRounds = ['All', ...roundOrder.filter(r =>
+    poolGames.some(g => g.round && g.round.toLowerCase().includes(r.toLowerCase().replace(' ', ' ')))
+  )];
+
+  // Build clean short labels from verbose ESPN round names
+  function shortRound(r) {
+    if (r.includes('First Four'))    return 'First Four';
+    if (r.includes('1st Round') || r.includes('1st round') || r.includes('First Round')) return 'Round 1';
+    if (r.includes('2nd Round') || r.includes('Second Round')) return 'Round 2';
+    if (r.includes('Sweet'))         return 'Sweet 16';
+    if (r.includes('Elite'))         return 'Elite 8';
+    if (r.includes('Final Four'))    return 'Final Four';
+    if (r.includes('National') || r.includes('Championship')) return 'Championship';
+    return r;
+  }
+
+  const uniqueShortRounds = ['All', ...new Set(poolGames.map(g => shortRound(g.round)))];
   const filterEl = document.getElementById('roundFilters');
-  filterEl.innerHTML = rounds.map(r =>
+  filterEl.innerHTML = uniqueShortRounds.map(r =>
     `<button class="round-btn ${r === state.activeRound ? 'active' : ''}"
       onclick="setRound('${r}')">${r}</button>`
   ).join('');
 
   const filtered = state.activeRound === 'All'
-    ? state.games
-    : state.games.filter(g => g.round === state.activeRound);
+    ? poolGames
+    : poolGames.filter(g => shortRound(g.round) === state.activeRound);
 
   // Sort: live first, then final, then upcoming
   const sorted = [...filtered].sort((a, b) => {
@@ -827,10 +848,12 @@ function renderTeams() {
 // STAT CARDS
 // ═══════════════════════════════════════════════════════════════════════
 function updateStatCards(sorted) {
-  const liveGames = state.games.filter(g => g.state === 'in').length;
+  // Only count games that involve at least one pool team
+  const poolGamesAll = state.games.filter(g => g.away.owner || g.home.owner);
+  const liveGames = poolGamesAll.filter(g => g.state === 'in').length;
   const todayStr = new Date().toISOString().slice(0,10);
-  const todayGames = state.games.filter(g => g.date.startsWith(todayStr)).length;
-  const completed = state.games.filter(g => g.state === 'post').length;
+  const todayGames = poolGamesAll.filter(g => g.date.startsWith(todayStr)).length;
+  const completed = poolGamesAll.filter(g => g.state === 'post').length;
   const totalPts = Object.values(state.standings).reduce((a,s) => a + s.pts, 0);
   const leader = sorted[0];
 
