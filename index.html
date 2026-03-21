@@ -498,6 +498,17 @@ function toPoolName(espnName) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// MANUAL SCORE OVERRIDES
+// Use for teams already eliminated where ESPN data is unreliable.
+// Format: "pool team name" → total points scored across all their games.
+// Applied once per roster slot — does NOT stack for wildcard duplicates
+// beyond what a normal slot would score.
+// ═══════════════════════════════════════════════════════════════════════
+const MANUAL_TEAM_SCORES = {
+  "Queens (N.C.)": 71   // Eliminated — ESPN name matching unreliable
+};
+
+// ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
 let state = {
@@ -716,6 +727,9 @@ function calcStandings(games) {
       Object.keys(rosters).forEach(person => {
         const s = standings[person];
         rosters[person].forEach(slot => {
+          // Skip manually overridden teams — handled in the pass below
+          if (MANUAL_TEAM_SCORES.hasOwnProperty(slot.team)) return;
+
           const poolNamesMatch = slot.team === side.name;
           const espnNamesMatch = toEspnName(slot.team) === side.espnName;
           if (!poolNamesMatch && !espnNamesMatch) return;
@@ -733,6 +747,25 @@ function calcStandings(games) {
           }
         });
       });
+    });
+  });
+
+  // ── Apply manual score overrides ─────────────────────────────────────
+  // Each roster slot for a manually overridden team gets exactly the
+  // override value. Curt has Queens (N.C.) as a drafted slot → gets 71 pts.
+  // If Queens also appeared as a wildcard, that slot would also get 71 pts
+  // independently (matching normal scoring behaviour for duplicate slots).
+  Object.keys(rosters).forEach(person => {
+    const s = standings[person];
+    rosters[person].forEach(slot => {
+      const overrideScore = MANUAL_TEAM_SCORES[slot.team];
+      if (overrideScore === undefined) return;
+
+      const storeKey = slot.team;
+      const key = slot.isWildcard ? 'wildcard' : 'drafted';
+      if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0 };
+      s.teams[storeKey][key] = overrideScore;  // set, not accumulate
+      s.pts += overrideScore;
     });
   });
 
