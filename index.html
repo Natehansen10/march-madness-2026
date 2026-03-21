@@ -201,6 +201,11 @@
   .teams-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
   .teams-table tr:last-child td { border-bottom: none; }
   .teams-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .teams-table-wide { table-layout: auto; }
+  .round-col { text-align: center !important; padding: 7px 6px !important; min-width: 36px; font-size: 0.78rem; }
+  .teams-table th.round-col { text-align: center; color: var(--muted); font-size: 0.65rem; letter-spacing: 0.8px; cursor: default; }
+  .total-col { text-align: right !important; padding: 7px 12px 7px 6px !important; min-width: 54px; }
+  .teams-table th.total-col { text-align: right; color: var(--accent); font-size: 0.68rem; }
   .wc-tag { font-size: 0.6rem; background: rgba(251,191,36,0.2); color: var(--gold); padding: 1px 5px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
   .elim-tag { font-size: 0.6rem; background: rgba(239,68,68,0.15); color: var(--red); padding: 1px 5px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
 
@@ -695,12 +700,37 @@ function buildRoster(person, resolvedOwners) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// ROUND KEY HELPER
+// Maps ESPN's verbose round string → a short internal key used for
+// per-round scoring. Called once per game during score calculation.
+// ═══════════════════════════════════════════════════════════════════════
+const ROUND_KEYS   = ['r1','r2','s16','e8','ff','ch'];
+const ROUND_LABELS = { r1:'R1', r2:'R2', s16:'S16', e8:'E8', ff:'FF', ch:'CH' };
+const ROUND_FULL   = { r1:'Round 1', r2:'Round 2', s16:'Sweet 16', e8:'Elite 8', ff:'Final Four', ch:'Championship' };
+
+function roundKey(roundStr) {
+  const r = (roundStr || '').toLowerCase();
+  if (r.includes('first four'))                          return null;   // excluded
+  if (r.includes('1st round') || r.includes('first round') ||
+      r.includes('round of 64') || r.includes('round 1'))              return 'r1';
+  if (r.includes('2nd round') || r.includes('second round') ||
+      r.includes('round of 32') || r.includes('round 2'))              return 'r2';
+  if (r.includes('sweet'))                               return 's16';
+  if (r.includes('elite'))                               return 'e8';
+  if (r.includes('final four') && !r.includes('national') &&
+      !r.includes('championship'))                       return 'ff';
+  if (r.includes('national') || r.includes('championship') ||
+      r.includes('title'))                               return 'ch';
+  return 'r1'; // safe default for unrecognised strings
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // STANDINGS CALCULATION
 // ═══════════════════════════════════════════════════════════════════════
 function calcStandings(games) {
   const standings = {};
   Object.keys(POOL.colors).forEach(p => {
-    // teams: { teamName: { drafted: pts, wildcard: pts } }
+    // teams: { teamName: { drafted: pts, wildcard: pts, rounds: {r1,r2,s16,e8,ff,ch} } }
     standings[p] = { pts: 0, wins: 0, losses: 0, gamesPlayed: 0, teams: {} };
   });
 
@@ -737,8 +767,10 @@ function calcStandings(games) {
           // Use the pool name as the storage key for display purposes
           const storeKey = slot.team;
           const key = slot.isWildcard ? 'wildcard' : 'drafted';
-          if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0 };
+          const rk = roundKey(game.round);
+          if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0, rounds: { r1:0, r2:0, s16:0, e8:0, ff:0, ch:0 } };
           s.teams[storeKey][key] += side.score;
+          if (rk) s.teams[storeKey].rounds[rk] += side.score;
           s.pts += side.score;
 
           if (game.state === 'post') {
@@ -763,8 +795,11 @@ function calcStandings(games) {
 
       const storeKey = slot.team;
       const key = slot.isWildcard ? 'wildcard' : 'drafted';
-      if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0 };
+      // Manually overridden teams are eliminated — they only played Round 1
+      const overrideRound = MANUAL_TEAM_SCORES[slot.team + '__round'] || 'r1';
+      if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0, rounds: { r1:0, r2:0, s16:0, e8:0, ff:0, ch:0 } };
       s.teams[storeKey][key] = overrideScore;  // set, not accumulate
+      s.teams[storeKey].rounds[overrideRound] = overrideScore;
       s.pts += overrideScore;
     });
   });
@@ -985,23 +1020,30 @@ function renderTeams() {
 
     const rows = allSlots.map(slot => {
       const { team, isWildcard, isPending } = slot;
-      const teamData = s.teams[team] || { drafted: 0, wildcard: 0 };
-      // Points for this specific slot
+      const emptyRounds = { r1:0, r2:0, s16:0, e8:0, ff:0, ch:0 };
+      const teamData = s.teams[team] || { drafted: 0, wildcard: 0, rounds: emptyRounds };
+      const rounds = teamData.rounds || emptyRounds;
       const slotPts = isWildcard ? teamData.wildcard : teamData.drafted;
       const isElim = eliminatedTeams.has(team);
       const seedVal = isPending ? '—' : getTeamSeed(team);
       const regionVal = isPending ? '—' : getTeamRegion(team);
-      const ptsVal = isPending
-        ? '<span style="color:var(--muted);font-size:0.75rem">Pending</span>'
-        : slotPts > 0 ? slotPts.toLocaleString() : '—';
       const wcBadge = isWildcard ? '<span class="wc-tag">WC</span>' : '';
       const elimBadge = isElim && !isWildcard ? '<span class="elim-tag">OUT</span>' : '';
       const rowStyle = isWildcard ? 'background:rgba(251,191,36,0.05);border-left:2px solid rgba(251,191,36,0.3);' : '';
+      function roundCell(rk) {
+        if (isPending) return '<td class="round-col" style="color:var(--muted)">—</td>';
+        const v = rounds[rk] || 0;
+        return `<td class="round-col" style="font-family:'DM Mono',monospace;color:${v > 0 ? 'var(--text)' : 'var(--muted)'}">${v > 0 ? v : '—'}</td>`;
+      }
+      const totalCell = isPending
+        ? '<td class="total-col" style="color:var(--muted);font-size:0.75rem">Pending</td>'
+        : `<td class="total-col" style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:600">${slotPts > 0 ? slotPts.toLocaleString() : '—'}</td>`;
       return `<tr style="${rowStyle}">
         <td>${team}${wcBadge}${elimBadge}</td>
         <td style="color:var(--muted)">${seedVal}</td>
         <td style="color:var(--muted)">${regionVal}</td>
-        <td style="font-family:'DM Mono',monospace;color:var(--accent)">${ptsVal}</td>
+        ${roundCell('r1')}${roundCell('r2')}${roundCell('s16')}${roundCell('e8')}${roundCell('ff')}${roundCell('ch')}
+        ${totalCell}
       </tr>`;
     }).join('');
 
@@ -1013,8 +1055,17 @@ function renderTeams() {
         <span style="color:var(--muted);font-size:0.82rem">9 slots · WC: ${wc}</span>
         <div class="pts-badge">${s.pts.toLocaleString()} pts</div>
       </div>
-      <table class="teams-table">
-        <thead><tr><th>Team</th><th>Seed</th><th>Region</th><th>Points Scored</th></tr></thead>
+      <table class="teams-table teams-table-wide">
+        <thead><tr>
+          <th>Team</th><th>Seed</th><th>Region</th>
+          <th class="round-col" title="Round 1">R1</th>
+          <th class="round-col" title="Round 2">R2</th>
+          <th class="round-col" title="Sweet 16">S16</th>
+          <th class="round-col" title="Elite 8">E8</th>
+          <th class="round-col" title="Final Four">FF</th>
+          <th class="round-col" title="Championship">CH</th>
+          <th class="total-col">TOTAL</th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
