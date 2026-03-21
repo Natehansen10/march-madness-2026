@@ -807,6 +807,10 @@ function calcStandings(games) {
       s.teams[storeKey][key] = overrideScore;  // set, not accumulate
       s.teams[storeKey].rounds[overrideRound] = overrideScore;
       s.pts += overrideScore;
+      // Manually overridden teams lost — count as a completed game loss so
+      // win/loss record and win % reflect the elimination correctly.
+      s.gamesPlayed++;
+      s.losses++;
     });
   });
 
