@@ -401,6 +401,102 @@ const POOL = {
   }
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// TEAM NAME MAPPING
+// pool name → ESPN display name (used in toEspnName for matching)
+// ESPN_TO_POOL is auto-built from this map and used inside normalizeName
+// ═══════════════════════════════════════════════════════════════════════
+const TEAM_NAME_MAP = {
+  // Pool name          : ESPN short name used in API responses
+  "Duke":               "Duke",
+  "Arizona":            "Arizona",
+  "Michigan":           "Michigan",
+  "Florida":            "Florida",
+  "UConn":              "Connecticut",
+  "Houston":            "Houston",
+  "Iowa St.":           "Iowa State",
+  "Purdue":             "Purdue",
+  "Gonzaga":            "Gonzaga",
+  "Michigan St.":       "Michigan State",
+  "Arkansas":           "Arkansas",
+  "Furman":             "Furman",
+  "McNeese":            "McNeese",
+  "Lehigh":             "Lehigh",
+  "Miami (Ohio)":       "Miami (OH)",
+  "High Point":         "High Point",
+  "Cal Baptist":        "California Baptist",
+  "Alabama":            "Alabama",
+  "Texas Tech":         "Texas Tech",
+  "Tennessee":          "Tennessee",
+  "Kentucky":           "Kentucky",
+  "Kansas":             "Kansas",
+  "Virginia":           "Virginia",
+  "St. John's":         "St. John's",
+  "Louisville":         "Louisville",
+  "UCLA":               "UCLA",
+  "TCU":                "TCU",
+  "UCF":                "UCF",
+  "South Florida":      "South Florida",
+  "North Dakota St.":   "North Dakota State",
+  "Siena":              "Siena",
+  "Wisconsin":          "Wisconsin",
+  "BYU":                "BYU",
+  "Villanova":          "Villanova",
+  "Missouri":           "Missouri",
+  "Texas":              "Texas",
+  "NC State":           "NC State",
+  "Hawaii":             "Hawai'i",
+  "Kennesaw St.":       "Kennesaw State",
+  "Queens (N.C.)":      "Queens",
+  "Long Island":        "LIU",
+  "Georgia":            "Georgia",
+  "Saint Louis":        "Saint Louis",
+  "Santa Clara":        "Santa Clara",
+  "SMU":                "SMU",
+  "Akron":              "Akron",
+  "Hofstra":            "Hofstra",
+  "Wright St.":         "Wright State",
+  "Tennessee St.":      "Tennessee State",
+  "UMBC":               "UMBC",
+  "Howard":             "Howard",
+  "Illinois":           "Illinois",
+  "Nebraska":           "Nebraska",
+  "Vanderbilt":         "Vanderbilt",
+  "North Carolina":     "UNC",
+  "Saint Mary's":       "Saint Mary's",
+  "Clemson":            "Clemson",
+  "Iowa":               "Iowa",
+  "Texas A&M":          "Texas A&M",
+  "VCU":                "VCU",
+  "Troy":               "Troy",
+  "Penn":               "Pennsylvania",
+  "Idaho":              "Idaho",
+  "Prairie View A&M":   "Prairie View A&M",
+  "Ohio St.":           "Ohio State",
+  "Utah St.":           "Utah State",
+  "Northern Iowa":      "Northern Iowa",
+  "Saint Mary's":       "Saint Mary's",
+  "Duke":               "Duke",
+  "Florida":            "Florida"
+};
+
+// Auto-invert: ESPN name → pool name (used in normalizeName)
+const ESPN_TO_POOL = {};
+Object.entries(TEAM_NAME_MAP).forEach(([poolName, espnName]) => {
+  if (!ESPN_TO_POOL[espnName]) ESPN_TO_POOL[espnName] = poolName;
+});
+
+// Convert pool team name → ESPN name (for any slot-vs-game comparison)
+function toEspnName(poolName) {
+  return TEAM_NAME_MAP[poolName] || poolName;
+}
+
+// Convert ESPN name → pool name (alias for clarity)
+function toPoolName(espnName) {
+  return ESPN_TO_POOL[espnName] || espnName;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════
@@ -418,8 +514,11 @@ let state = {
 const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard';
 
 function normalizeName(espnName) {
+  // 1. Primary: ESPN_TO_POOL built from TEAM_NAME_MAP — most accurate
+  if (ESPN_TO_POOL[espnName]) return ESPN_TO_POOL[espnName];
+  // 2. Secondary: legacy POOL.nameMap for any entries not in TEAM_NAME_MAP
   if (POOL.nameMap[espnName]) return POOL.nameMap[espnName];
-  // Fuzzy: strip last word (usually nickname)
+  // 3. Last resort: strip nickname suffix (e.g. "Duke Blue Devils" → "Duke")
   const parts = espnName.split(' ');
   if (parts.length > 2) return parts.slice(0, -1).join(' ');
   return espnName;
@@ -521,8 +620,12 @@ async function fetchAllRecentGames() {
 // Returns true if this game is a First Four matchup
 function isFirstFourGame(game) {
   return POOL.firstFour.some(ff =>
+    // Primary: pool name comparison (both sides normalized via normalizeName)
     (ff.team1 === game.away.name && ff.team2 === game.home.name) ||
-    (ff.team2 === game.away.name && ff.team1 === game.home.name)
+    (ff.team2 === game.away.name && ff.team1 === game.home.name) ||
+    // Fallback: ESPN name comparison in case normalizeName missed an edge case
+    (toEspnName(ff.team1) === game.away.espnName && toEspnName(ff.team2) === game.home.espnName) ||
+    (toEspnName(ff.team2) === game.away.espnName && toEspnName(ff.team1) === game.home.espnName)
   );
 }
 
@@ -534,9 +637,14 @@ function buildResolvedOwners(games) {
 
   POOL.firstFour.forEach(ff => {
     const ffGame = games.find(g =>
-      g.state === 'post' &&
-      ((g.away.name === ff.team1 && g.home.name === ff.team2) ||
-       (g.away.name === ff.team2 && g.home.name === ff.team1))
+      g.state === 'post' && (
+        // Pool name match (primary)
+        (g.away.name === ff.team1 && g.home.name === ff.team2) ||
+        (g.away.name === ff.team2 && g.home.name === ff.team1) ||
+        // ESPN name fallback
+        (toEspnName(ff.team1) === g.away.espnName && toEspnName(ff.team2) === g.home.espnName) ||
+        (toEspnName(ff.team2) === g.away.espnName && toEspnName(ff.team1) === g.home.espnName)
+      )
     );
 
     if (ffGame) {
@@ -546,8 +654,7 @@ function buildResolvedOwners(games) {
       resolved[winner] = ff.owner;
       delete resolved[loser];
     } else {
-      // Game not yet played — make sure both teams are mapped to owner
-      // so the pre-game display shows the matchup correctly
+      // Game not yet played — map both sides so display shows pending matchup
       resolved[ff.team1] = ff.owner;
       resolved[ff.team2] = ff.owner;
     }
@@ -557,39 +664,75 @@ function buildResolvedOwners(games) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// ROSTER BUILDER
+// Returns an array of scoring slots for a person: [{ team, isWildcard }]
+// A person with Arizona drafted AND Arizona as wildcard gets TWO slots.
+// ═══════════════════════════════════════════════════════════════════════
+function buildRoster(person, resolvedOwners) {
+  // Drafted slots — teams assigned to this person after First Four resolution
+  const draftedTeams = Object.keys(resolvedOwners)
+    .filter(t => resolvedOwners[t] === person);
+
+  const slots = draftedTeams.map(t => ({ team: t, isWildcard: false }));
+
+  // Wildcard slot — always added as its own separate scoring slot
+  // Even if the same team is already drafted (Curt+Arizona case = counts twice)
+  const wc = POOL.wildcards[person];
+  if (wc) slots.push({ team: wc, isWildcard: true });
+
+  return slots;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // STANDINGS CALCULATION
 // ═══════════════════════════════════════════════════════════════════════
 function calcStandings(games) {
   const standings = {};
   Object.keys(POOL.colors).forEach(p => {
+    // teams: { teamName: { drafted: pts, wildcard: pts } }
     standings[p] = { pts: 0, wins: 0, losses: 0, gamesPlayed: 0, teams: {} };
   });
 
-  // Build owner map with First Four winners resolved
+  // Resolve First Four winners into the owners map
   const resolvedOwners = buildResolvedOwners(games);
 
-  games.forEach(game => {
-    if (game.state !== 'post' && game.state !== 'in') return; // skip scheduled
+  // Build per-person rosters (with wildcard as a separate slot)
+  const rosters = {};
+  Object.keys(POOL.colors).forEach(p => {
+    rosters[p] = buildRoster(p, resolvedOwners);
+  });
 
-    // ✅ First Four games do NOT count toward points or wins
-    if (isFirstFourGame(game)) return;
+  games.forEach(game => {
+    if (game.state !== 'post' && game.state !== 'in') return;
+    if (isFirstFourGame(game)) return; // First Four = no points
 
     [game.away, game.home].forEach(side => {
-      // Use resolved owner (First Four winner replaces loser)
-      const owner = resolvedOwners[side.name];
-      if (!owner || !standings[owner]) return;
       if (side.score === null) return;
 
-      const s = standings[owner];
-      s.pts += side.score;
-      if (!s.teams[side.name]) s.teams[side.name] = 0;
-      s.teams[side.name] += side.score;
+      // Score every roster slot that matches this team.
+      // Match on pool names (side.name is already pool-normalized via normalizeName).
+      // Also try toEspnName(slot.team) === side.espnName as a fallback in case
+      // normalizeName failed to map an edge-case ESPN name to a pool name.
+      Object.keys(rosters).forEach(person => {
+        const s = standings[person];
+        rosters[person].forEach(slot => {
+          const poolNamesMatch = slot.team === side.name;
+          const espnNamesMatch = toEspnName(slot.team) === side.espnName;
+          if (!poolNamesMatch && !espnNamesMatch) return;
 
-      // Count wins/losses only for completed games
-      if (game.state === 'post') {
-        s.gamesPlayed++;
-        if (side.winner) s.wins++; else s.losses++;
-      }
+          // Use the pool name as the storage key for display purposes
+          const storeKey = slot.team;
+          const key = slot.isWildcard ? 'wildcard' : 'drafted';
+          if (!s.teams[storeKey]) s.teams[storeKey] = { drafted: 0, wildcard: 0 };
+          s.teams[storeKey][key] += side.score;
+          s.pts += side.score;
+
+          if (game.state === 'post') {
+            s.gamesPlayed++;
+            if (side.winner) s.wins++; else s.losses++;
+          }
+        });
+      });
     });
   });
 
@@ -752,25 +895,22 @@ function renderGames() {
 function renderTeams() {
   const container = document.getElementById('teamsContainer');
   const sorted = Object.entries(state.standings).sort((a,b) => b[1].pts - a[1].pts);
-
-  // Build resolved owners so First Four winners show correctly
   const resolvedOwners = buildResolvedOwners(state.games);
 
   container.innerHTML = sorted.map(([person, s]) => {
     const color = POOL.colors[person];
     const wc = POOL.wildcards[person];
 
-    // Get this person's 8 drafted teams from base owners
+    // Build the full roster for display — same logic as calcStandings
+    // Each slot is { team, isWildcard, displayName }
     const draftedTeams = Object.keys(POOL.owners)
       .filter(t => POOL.owners[t] === person)
       .sort();
 
-    // Apply First Four resolutions — swap in winner, swap out loser
-    const resolvedTeams = draftedTeams.map(team => {
-      // Check if this team was a First Four pick that has been resolved to a different winner
+    // Resolve First Four picks to winner/pending
+    const resolvedDrafted = draftedTeams.map(team => {
       const ff = POOL.firstFour.find(f => f.owner === person && (f.team1 === team || f.team2 === team));
       if (ff) {
-        // Find if game is done
         const ffGame = state.games.find(g =>
           g.state === 'post' &&
           ((g.away.name === ff.team1 && g.home.name === ff.team2) ||
@@ -778,46 +918,52 @@ function renderTeams() {
         );
         if (ffGame) {
           const winner = ffGame.away.winner ? ffGame.away.name : ffGame.home.name;
-          return winner; // replace original pick with actual winner
+          return { team: winner, isWildcard: false };
         }
-        // Game not yet played — show as "Team1 vs Team2" placeholder
-        if (ff.team1 === team) return `${ff.team1} vs ${ff.team2}`; // show matchup
+        // Pending First Four — show matchup label
+        if (ff.team1 === team) return { team: `${ff.team1} vs ${ff.team2}`, isWildcard: false, isPending: true };
       }
-      return team;
-    }).filter((t, i, arr) => arr.indexOf(t) === i); // dedupe
-
-    // Add wildcard as 9th row if not already in drafted list
-    const wcInDraft = draftedTeams.includes(wc);
-    const displayTeams = [...resolvedTeams];
-    if (!wcInDraft) displayTeams.push(wc + '__WC__');
-
-    // Find eliminated teams
-    const eliminatedTeams = new Set();
-    state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
-      [g.away, g.home].forEach(side => {
-        if (!side.winner && resolvedOwners[side.name] === person) eliminatedTeams.add(side.name);
-      });
-    });
-    state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
-      [g.away, g.home].forEach(side => {
-        if (side.winner && resolvedOwners[side.name] === person) eliminatedTeams.delete(side.name);
-      });
+      return { team, isWildcard: false };
     });
 
-    const rows = displayTeams.map(teamRaw => {
-      const isWCRow = teamRaw.endsWith('__WC__');
-      const team = isWCRow ? teamRaw.replace('__WC__','') : teamRaw;
-      const isMatchup = team.includes(' vs ');
-      const teamPts = s.teams[team] || 0;
-      const isWCInDraft = !isWCRow && wc === team; // WC badge on drafted team that matches wildcard
+    // Dedupe resolved drafted slots (First Four resolution can't create dupes here,
+    // but guard anyway)
+    const seenDraft = new Set();
+    const dedupedDrafted = resolvedDrafted.filter(slot => {
+      if (seenDraft.has(slot.team)) return false;
+      seenDraft.add(slot.team);
+      return true;
+    });
+
+    // Wildcard is ALWAYS its own separate slot — never suppressed
+    const wcSlot = { team: wc, isWildcard: true };
+    const allSlots = [...dedupedDrafted, wcSlot];
+
+    // Eliminated teams (lost in a non-First-Four game, haven't won since)
+    const wonTeams = new Set();
+    const lostTeams = new Set();
+    state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
+      [g.away, g.home].forEach(side => {
+        if (resolvedOwners[side.name] !== person) return;
+        if (side.winner) wonTeams.add(side.name); else lostTeams.add(side.name);
+      });
+    });
+    const eliminatedTeams = new Set([...lostTeams].filter(t => !wonTeams.has(t)));
+
+    const rows = allSlots.map(slot => {
+      const { team, isWildcard, isPending } = slot;
+      const teamData = s.teams[team] || { drafted: 0, wildcard: 0 };
+      // Points for this specific slot
+      const slotPts = isWildcard ? teamData.wildcard : teamData.drafted;
       const isElim = eliminatedTeams.has(team);
-      const seedVal = isMatchup ? '—' : getTeamSeed(team);
-      const regionVal = isMatchup ? '—' : getTeamRegion(team);
-      const ptsVal = isMatchup ? '<span style="color:var(--muted);font-size:0.75rem">Pending</span>'
-                   : teamPts > 0 ? teamPts.toLocaleString() : '—';
-      const wcBadge = (isWCRow || isWCInDraft) ? '<span class="wc-tag">WC</span>' : '';
-      const elimBadge = isElim ? '<span class="elim-tag">OUT</span>' : '';
-      const rowStyle = isWCRow ? 'background:rgba(251,191,36,0.04);' : '';
+      const seedVal = isPending ? '—' : getTeamSeed(team);
+      const regionVal = isPending ? '—' : getTeamRegion(team);
+      const ptsVal = isPending
+        ? '<span style="color:var(--muted);font-size:0.75rem">Pending</span>'
+        : slotPts > 0 ? slotPts.toLocaleString() : '—';
+      const wcBadge = isWildcard ? '<span class="wc-tag">WC</span>' : '';
+      const elimBadge = isElim && !isWildcard ? '<span class="elim-tag">OUT</span>' : '';
+      const rowStyle = isWildcard ? 'background:rgba(251,191,36,0.05);border-left:2px solid rgba(251,191,36,0.3);' : '';
       return `<tr style="${rowStyle}">
         <td>${team}${wcBadge}${elimBadge}</td>
         <td style="color:var(--muted)">${seedVal}</td>
@@ -826,14 +972,12 @@ function renderTeams() {
       </tr>`;
     }).join('');
 
-    const totalShown = wcInDraft ? draftedTeams.length : draftedTeams.length + 1;
-
     return `
     <div class="person-section">
       <div class="person-header">
         <div class="person-dot" style="background:${color}"></div>
         <h3>${person}</h3>
-        <span style="color:var(--muted);font-size:0.82rem">${totalShown} teams · WC: ${wc}${wcInDraft ? ' (drafted)' : ''}</span>
+        <span style="color:var(--muted);font-size:0.82rem">9 slots · WC: ${wc}</span>
         <div class="pts-badge">${s.pts.toLocaleString()} pts</div>
       </div>
       <table class="teams-table">
@@ -854,7 +998,7 @@ function updateStatCards(sorted) {
   const todayStr = new Date().toISOString().slice(0,10);
   const todayGames = poolGamesAll.filter(g => g.date.startsWith(todayStr)).length;
   const completed = poolGamesAll.filter(g => g.state === 'post').length;
-  const totalPts = Object.values(state.standings).reduce((a,s) => a + s.pts, 0);
+  const totalPts = Object.values(state.standings).reduce((a,s) => a + s.pts, 0); // pts already includes wildcard double-counting
   const leader = sorted[0];
 
   document.getElementById('statGamesToday').textContent = todayGames;
