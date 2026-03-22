@@ -577,6 +577,20 @@ function parseGames(events) {
       (ff.team2 === awayShort && ff.team1 === homeShort)
     );
 
+    const awayScore = away.score ? parseInt(away.score) : null;
+    const homeScore = home.score ? parseInt(home.score) : null;
+
+    // Determine winner reliably: prefer ESPN's own winner field, but fall back
+    // to score comparison for completed games. ESPN's winner field is sometimes
+    // absent or null even after the game ends, causing silent elimination failures.
+    let awayWinner = away.winner === true;
+    let homeWinner = home.winner === true;
+    if (!awayWinner && !homeWinner && statusState === 'post'
+        && awayScore !== null && homeScore !== null) {
+      awayWinner = awayScore > homeScore;
+      homeWinner = homeScore > awayScore;
+    }
+
     return {
       id: ev.id,
       name: ev.name,
@@ -589,16 +603,16 @@ function parseGames(events) {
       away: {
         espnName: away.team.displayName,
         name: awayShort,
-        score: away.score ? parseInt(away.score) : null,
-        winner: away.winner || false,
+        score: awayScore,
+        winner: awayWinner,
         seed: away.curatedRank?.current || away.team.seed || null,
         owner: POOL.owners[awayShort] || null
       },
       home: {
         espnName: home.team.displayName,
         name: homeShort,
-        score: home.score ? parseInt(home.score) : null,
-        winner: home.winner || false,
+        score: homeScore,
+        winner: homeWinner,
         seed: home.curatedRank?.current || home.team.seed || null,
         owner: POOL.owners[homeShort] || null
       }
@@ -611,8 +625,9 @@ async function fetchAllRecentGames() {
   const today = new Date();
   const dates = new Set();
 
-  // Always include today and yesterday
-  for (let d = -1; d <= 1; d++) {
+  // Include a rolling 10-day lookback + 3-day lookahead so no completed games
+  // are missed as the tournament progresses across multi-day rounds.
+  for (let d = -10; d <= 3; d++) {
     const dt = new Date(today);
     dt.setDate(dt.getDate() + d);
     dates.add(dt.toISOString().slice(0,10).replace(/-/g,''));
@@ -1047,7 +1062,16 @@ function renderTeams() {
           ? side.name
           : [...personTeamNames].find(pt => toEspnName(pt) === side.espnName) || side.name;
 
-        if (side.winner) wonTeams.add(canonicalName); else lostTeams.add(canonicalName);
+        // winner is already reliably set in parseGames (score fallback applied).
+        // A completed game with score data always has a definitive winner/loser.
+        if (side.winner) {
+          wonTeams.add(canonicalName);
+        } else {
+          // Only count as a loss in a completed (post) game with actual scores
+          if (g.state === 'post' && side.score !== null) {
+            lostTeams.add(canonicalName);
+          }
+        }
       });
     });
     const eliminatedTeams = new Set([...lostTeams].filter(t => !wonTeams.has(t)));
