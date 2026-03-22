@@ -1010,32 +1010,26 @@ function canonicalTeamName(name) {
 // A team is "alive" if its most-recent completed game was a win.
 // Teams with no completed games are not in the map (treated as alive by isTeamOut).
 function buildTeamStatusMap(games) {
-  // Track each team's last completed result: true = won, false = lost
-  const lastResult = {};  // canonicalName → true (won) | false (lost)
-
-  games
+  // Sort games chronologically so we always process earlier rounds before later ones.
+  // This means the LATEST game result for each team is the final write — if a team
+  // won Round 1 then lost Round 2, Round 2 is processed last and correctly marks them OUT.
+  const sorted = [...games]
     .filter(g => g.state === 'post' && !isFirstFourGame(g))
-    .forEach(g => {
-      [g.away, g.home].forEach(side => {
-        const cn = canonicalTeamName(side.name);
-        // Determine win/loss: use parsed winner field (set reliably in parseGames
-        // via score comparison fallback when ESPN field is absent).
-        const won = side.winner === true;
-        const lost = !won && side.score !== null;
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        if (won) {
-          // A win always overrides a prior loss — team is still alive
-          lastResult[cn] = true;
-        } else if (lost) {
-          // Only mark as lost if we haven't already seen a subsequent win
-          // (we process in game order; we want latest result to win)
-          // But since we can't guarantee order, we use: if they ever won, keep alive
-          if (lastResult[cn] !== true) {
-            lastResult[cn] = false;
-          }
-        }
-      });
+  // lastResult: canonicalName → true (won most recent game) | false (lost most recent game)
+  const lastResult = {};
+
+  sorted.forEach(g => {
+    [g.away, g.home].forEach(side => {
+      const cn = canonicalTeamName(side.name);
+      const won  = side.winner === true;
+      const lost = !won && side.score !== null;
+      // Unconditionally overwrite — later games always take precedence over earlier ones.
+      // A Round 2 loss correctly replaces a Round 1 win.
+      if (won || lost) lastResult[cn] = won;
     });
+  });
 
   // Convert to status strings
   const statusMap = {};
@@ -1043,7 +1037,7 @@ function buildTeamStatusMap(games) {
     statusMap[cn] = won ? 'alive' : 'out';
   });
 
-  // Apply manual overrides — these are always "out" regardless of ESPN data
+  // Apply manual overrides (e.g. Queens) — always out regardless of ESPN data
   MANUAL_ELIMINATED.forEach(poolName => {
     statusMap[canonicalTeamName(poolName)] = 'out';
   });
