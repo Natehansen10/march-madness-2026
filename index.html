@@ -1018,12 +1018,36 @@ function renderTeams() {
     const allSlots = [...dedupedDrafted, wcSlot];
 
     // Eliminated teams (lost in a non-First-Four game, haven't won since)
+    // Root cause fix: ownership was checked only via pool name (resolvedOwners[side.name]).
+    // If normalizeName() failed to map an ESPN name → pool name, the check returned false
+    // and the team was never added to lostTeams, leaving it incorrectly marked alive.
+    // Fix: use the same dual-match (pool name OR ESPN name) that calcStandings uses.
     const wonTeams = new Set();
     const lostTeams = new Set();
+    // Build the set of pool-name teams this person owns (for fast lookup)
+    const personTeamNames = new Set(
+      Object.keys(resolvedOwners).filter(t => resolvedOwners[t] === person)
+    );
+    // Also include wildcard team name
+    personTeamNames.add(POOL.wildcards[person]);
+
     state.games.filter(g => g.state === 'post' && !isFirstFourGame(g)).forEach(g => {
       [g.away, g.home].forEach(side => {
-        if (resolvedOwners[side.name] !== person) return;
-        if (side.winner) wonTeams.add(side.name); else lostTeams.add(side.name);
+        // Primary: pool name match via resolvedOwners
+        const ownedByPool = resolvedOwners[side.name] === person;
+        // Fallback: convert pool team names to ESPN names and compare against raw ESPN name
+        // This catches cases where normalizeName() returned an imperfect pool name
+        const ownedByEspn = [...personTeamNames].some(
+          poolTeam => toEspnName(poolTeam) === side.espnName
+        );
+        if (!ownedByPool && !ownedByEspn) return;
+
+        // Use the pool name as the canonical key (prefer side.name if it maps, else find it)
+        const canonicalName = ownedByPool
+          ? side.name
+          : [...personTeamNames].find(pt => toEspnName(pt) === side.espnName) || side.name;
+
+        if (side.winner) wonTeams.add(canonicalName); else lostTeams.add(canonicalName);
       });
     });
     const eliminatedTeams = new Set([...lostTeams].filter(t => !wonTeams.has(t)));
